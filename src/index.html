@@ -6,27 +6,65 @@
 </head>
 <body>
     <h1>Hello there!</h1>
-    <script>
-        let socket = new WebSocket("ws://localhost:8081")
-        console.log("Attempting websocket connection...")
 
-        socket.onopen = () => {
-            console.log("Successfully connected.")
-            socket.send("Hi from the client!")
+
+    <form action="#" onsubmit="return handleSubmit()">
+        <input type="text" id="chat-msg" />
+        <input type="submit" value="send" />
+    </form>
+
+    <div id="container">
+
+    </div>
+
+    <script>
+        window.socket = new WebSocket("ws://localhost:8000/ws-chat");
+        setUpSocket(displayMessage);
+
+        function handleSubmit()
+        {
+            var el = document.getElementById("chat-msg")
+            socket.send(el.value)
+            el.value = ''
+
+            return false;
         }
 
-         socket.onclose = (event) => {
-            console.log("Socket closed connection: ", event)
-         }
+        function setUpSocket(onmessage)
+        {
+            socket.onopen = function() {
+                console.log("Connected");
+            }
 
-         socket.onerror = (error) => {
-            console.log("An error occurred in the socket connection: ", error)
-         }
+            socket.onclose = function(event) {
+                if (event.wasClean) {
+                    console.log('Connection closed');
+                } else {
+                    console.log('ERROR: Connection reset');
+                    console.log('Code: ' + event.code + ' reason: ' + event.reason);
+                }
+            }
 
-         socket.onmessage = (event) => {
-             console.log(event.data)
-         }
+            socket.onmessage = onmessage;
+
+            socket.onerror = function(error) {
+                console.log("Ошибка " + error.message);
+            }
+        }
+
+        function displayMessage(msg)
+        {
+            var container = document.getElementById("container")
+
+            var div = document.createElement("div")
+            div.className = 'message'
+
+            var textNode = document.createTextNode(msg.data);
+
+            div.appendChild(textNode)
+            container.appendChild(div)
+        }
+
     </script>
-
 </body>
 </html>

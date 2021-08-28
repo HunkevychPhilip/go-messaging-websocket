@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Open(viper.GetString("app.indexFilePath"))
 	if err != nil {
 		h.utils.ResponseWriter.GenerateError(w, http.StatusInternalServerError, "Failed to read 'index.html'.")
@@ -20,6 +20,4 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
 }

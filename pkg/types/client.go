@@ -1,7 +1,6 @@
 package types
 
-import "github.com/google/uuid"
-
-type Client struct {
-	Uid uuid.UUID
+type NewClient struct {
+	ClientNick string
+	MsgChan    chan *Msg
 }
