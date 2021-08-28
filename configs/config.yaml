@@ -1,0 +1,6 @@
+app:
+  port: "8000"
+  indexFilePath: "src/index.html"
+
+ws:
+  port: "8001"
