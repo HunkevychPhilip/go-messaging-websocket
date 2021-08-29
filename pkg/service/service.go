@@ -1,18 +1,20 @@
 package service
 
-import "github.com/gorilla/websocket"
+import (
+	"github.com/PhilipHunkevych/go-messaging-app/pkg/types"
+	"github.com/gorilla/websocket"
+)
 
 type Chat interface {
 	NewClient(conn *websocket.Conn)
-	Router()
 }
 
 type Service struct {
 	ChatService Chat
 }
 
-func NewService() *Service {
+func NewService(c *types.ChatChannels) *Service {
 	return &Service{
-		ChatService: NewChatService(),
+		ChatService: NewChatService(c),
 	}
 }
