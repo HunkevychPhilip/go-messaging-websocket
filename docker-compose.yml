@@ -1,0 +1,17 @@
+version : '3'
+
+services:
+    lb:
+        image: haproxy
+        ports:
+            - "8000:8000"
+        volumes:
+            - ./loadbalancer:/usr/local/etc/haproxy
+    ws1:
+        build: .
+    ws2:
+        build: .
+    ws3:
+        build: .
+    ws4:
+        build: .
