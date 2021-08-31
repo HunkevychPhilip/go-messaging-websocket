@@ -15,3 +15,5 @@ services:
         build: .
     ws4:
         build: .
+    redis-server:
+        image: redis
