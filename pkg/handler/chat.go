@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
@@ -20,7 +21,7 @@ func (h *Handler) Chat(rw http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	log.Println("Client successfully connected.")
+	fmt.Println("Client successfully connected.")
 
-	h.service.ChatService.NewClient(conn)
+	h.service.Chat.NewClient(conn)
 }
