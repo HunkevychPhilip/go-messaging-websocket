@@ -3,95 +3,134 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/PhilipHunkevych/go-messaging-app/pkg/messaging"
+	"github.com/PhilipHunkevych/go-messaging-app/pkg/datastore"
 	"github.com/PhilipHunkevych/go-messaging-app/pkg/types"
 	"github.com/brianvoe/gofakeit"
 	"github.com/gorilla/websocket"
+	"github.com/sirupsen/logrus"
+	"net/http"
 	"strings"
 )
 
-type Chat interface {
-	NewClient(conn *websocket.Conn)
+const (
+	messagesChannelPrefix = "messages.*"
+	messagesEventNew      = "messages.event.new"
+
+	errWebsocketGoingAway = "1001"
+)
+
+var upgradeTmpl = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
 type ChatService struct {
-	messaging *messaging.Messaging
+	rdbChat datastore.Chat
 }
 
-func NewChatService(m *messaging.Messaging) *ChatService {
+func NewChatService(dc datastore.Chat) *ChatService {
 	return &ChatService{
-		messaging: m,
+		rdbChat: dc,
 	}
 }
 
-func (c *ChatService) NewClient(conn *websocket.Conn) {
+func (c *ChatService) UpgradeConn(rw http.ResponseWriter, r *http.Request) (*websocket.Conn, error) {
+	upgradeTmpl.CheckOrigin = func(r *http.Request) bool { return true }
+
+	conn, err := upgradeTmpl.Upgrade(rw, r, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+func (c *ChatService) ServeNewConn(conn *websocket.Conn) {
 	nickname := gofakeit.Name()
 
-	defer func() {
-		err := conn.Close()
-		if err != nil {
-			fmt.Println("Failed to close connection" + err.Error())
-		}
-	}()
-
-	p := c.messaging.Client.PSubscribe("messages.*")
-
-	_, err := p.Receive()
+	pubsub, err := c.rdbChat.Subscribe(messagesChannelPrefix)
 	if err != nil {
-		fmt.Println("Failed to subscribe" + err.Error())
+		logrus.Error(err)
 
 		return
 	}
 
-	ch := p.Channel()
+	conn.SetCloseHandler(func(code int, text string) error {
+		logrus.Infof("Connection closed for user %s", nickname)
+
+		err = pubsub.Unsubscribe()
+		if err != nil {
+			return err
+		}
+		err = pubsub.Close()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
 
 	go func() {
-		for msg := range ch {
-			fmt.Printf("Received message: %s.\n", msg.Channel)
+		for msg := range pubsub.Channel() {
+			logrus.Infof("Received message: %s.", msg.Channel)
 
 			switch msg.Channel {
 			case "messages.event.new":
-				var message types.Message
-
-				if err := json.NewDecoder(strings.NewReader(msg.Payload)).Decode(&message); err != nil {
-					continue
-				}
-
-				err = conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("> %s: %s", message.Owner, message.Content)))
-				if err != nil {
-					fmt.Println("Failed to write message" + err.Error())
+				if err = websocketWrite(conn, msg.Payload); err != nil {
+					logrus.Error(err)
 
 					return
 				}
+			default:
+				logrus.Infof("Unrecognized event: %s.", msg.Channel)
 			}
 		}
 	}()
 
 	for {
-		_, p, err := conn.ReadMessage()
+		_, bytes, err := conn.ReadMessage()
 		if err != nil {
-			fmt.Println("Failed to read message" + err.Error())
+			if strings.Contains(err.Error(), errWebsocketGoingAway) {
+				logrus.Info("Connection gone away...")
+
+				return
+			}
+			logrus.Error(err)
 
 			return
 		}
 
-		message := types.Message{
+		err = c.rdbChat.PostToChannel(messagesEventNew, types.Message{
 			Owner:   nickname,
-			Content: string(p),
-		}
+			Content: string(bytes),
+		})
 
-		p, err = json.Marshal(message)
 		if err != nil {
-			fmt.Println("Failed to marshal message.")
+			logrus.Error(err)
 
 			return
 		}
 
-		res := c.messaging.Client.Publish("messages.event.new", p)
-		if res.Err() != nil {
-			fmt.Println("Failed to publish message")
-
-			return
-		}
 	}
+}
+
+func websocketWrite(conn *websocket.Conn, payload string) error {
+	var msg types.Message
+
+	err := json.NewDecoder(strings.NewReader(payload)).Decode(&msg)
+	if err != nil {
+		logrus.Info("Failed to decode message", err.Error())
+
+		return err
+	}
+
+	wsResponse := fmt.Sprintf("> %s: %s", msg.Owner, msg.Content)
+	err = conn.WriteMessage(websocket.TextMessage, []byte(wsResponse))
+	if err != nil {
+		logrus.Info("Failed to write message", err.Error())
+
+		return err
+	}
+
+	return nil
 }
